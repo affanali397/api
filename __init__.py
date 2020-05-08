@@ -1,59 +1,45 @@
-from flask import Flask, request, jsonify
+from flask import Flask, render_template, url_for, flash, redirect
 from flask_sqlalchemy import SQLAlchemy
-from flask_marshmallow import Marshmallow
-import os
+from forms import RegistrationForm, LoginForm
 
-# Init app
 app = Flask(__name__)
-basedir = os.path.abspath(os.path.dirname(__file__))
-
-# Database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(basedir, 'db.sqlite')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Init db
+app.config['SECRET_KEY'] = '31506eb9788815dda26a56f0400f17a9'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 db = SQLAlchemy(app)
+from models import User, Post
 
-# Init ma
-ma = Marshmallow(app)
-
-# Db Model
-class Package(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), unique=True)
-    description = db.Column(db.String(200))
-    price = db.Column(db.Float)
-
-    def __init__(self, name, description, price):
-        self.name = name
-        self.description = description
-        self.price = price
-
-# Package Schema
-class PackageSchema(ma.Schema):
-    class Meta:
-        fields = ('id', 'name', 'description', 'price')
+@app.route("/")
+@app.route("/home")
+def home():
+    return render_template("home.html", posts=posts)
 
 
-package_schema = PackageSchema()
-packages_schema = PackageSchema(many=True)
+@app.route("/about")
+def about():
+    return render_template("About.html", title='About')
 
-#create a package
-@app.route('/package', methods=['POST'])
-def add_package():
-    name = request.json['name']
-    description = request.json['description']
-    price = request.json['price']
+@app.route("/register", methods=['GET', 'POST'])
+def register():
+    form = RegistrationForm()
+    if form.validate_on_submit():
+        hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
+        user = User(username = form.username.data, email = form.email.data, password = hashed_password)
+        db.session.add(user)
+        db.session.commit()
+        flash(f'Your account has been created! You are now able to log in!', 'success')
+        return redirect(url_for('login'))
+    return render_template("register.html", title='Register', form=form)
 
-    new_package = Package(name, description, price)
+@app.route("/login", methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        if form.email.data == 'admin@blog.com' and form.password.data == 'password':
+            flash('You have been logged in!', 'success')
+            return redirect(url_for('home'))
+        else:
+            flash('LogIn unsuccessful, Please check username and password', 'danger')
+    return render_template("login.html", title='Login', form=form)
 
-    db.session.add(new_package)
-    db.session.commit()
-    
-    return package_schema.jsonify(new_package)
-
-# Run Server
-if __name__ =='__main__':
+if __name__ == '__main__':
     app.run(debug=True)
-
-
